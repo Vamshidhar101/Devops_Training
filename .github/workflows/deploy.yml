@@ -1,0 +1,36 @@
+name: Deploy Static Website to Pages
+
+on:
+  push:
+    branches: ["main"] # Tells Git to run this workflow every time someone pushes to main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest # Tells GitHub to spin up a fresh Linux machine to run these steps
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4 # Clones your code onto the temporary Linux machine
+
+      - name: Setup GitHub Pages Environment
+        uses: actions/configure-pages@v4
+
+      - name: Upload Web Files
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' # Uploads everything in the current directory (Index.html, java.css)
+
+      - name: Deploy to Live Web Server
+        id: deployment
+        uses: actions/deploy-pages@v4
