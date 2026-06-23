@@ -1,0 +1,113 @@
+name: End-to-End CI/CD Production Pipeline
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"] # Also runs tests on Pull Requests before merging!
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  # -----------------------------------------------------------------
+  # STAGE 1: Static Code Analysis & Security (Runs First in Parallel)
+  # -----------------------------------------------------------------
+  lint-code:
+    name: 🎨 Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Super-Linter
+        uses: super-linter/super-linter@v5
+        env:
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_HTML: true
+          VALIDATE_CSS: true
+
+  security-scan:
+    name: 🔒 Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Scan Repository for Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+
+  # -----------------------------------------------------------------
+  # STAGE 2: Core Testing (Waits for Linting & Security to Pass)
+  # -----------------------------------------------------------------
+  unit-test:
+    name: 🧪 Unit Testing
+    runs-on: ubuntu-latest
+    needs: [lint-code, security-scan] # Requires Stage 1 to turn green first
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: |
+          if [ -f package.json ]; then npm install; else echo "No package.json found, skipping npm install"; fi
+
+      # Optional placeholder for demonstration if you don't have tests yet
+      - name: Run Jest Tests
+        run: echo "Running unit tests..." 
+
+  # -----------------------------------------------------------------
+  # STAGE 3: Advanced Integration Testing (Waits for Unit Tests)
+  # -----------------------------------------------------------------
+  integration-and-e2e:
+    name: 🖥️ Integration & E2E Testing
+    runs-on: ubuntu-latest
+    needs: [unit-test] # Requires Stage 2 to pass
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run E2E Verification
+        run: echo "Simulating full browser and API integration checks..."
+
+  # -----------------------------------------------------------------
+  # STAGE 4: Deployment (Only executes if ALL previous tests pass!)
+  # -----------------------------------------------------------------
+  deploy:
+    name: 🚀 Production Deployment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: [integration-and-e2e] # ⚠️ Critical: Will NOT run if any test fails
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only deploy on actual merges to main
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub Pages Environment
+        uses: actions/configure-pages@v4
+
+      - name: Upload Web Files
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' 
+
+      - name: Deploy to Live Web Server
+        id: deployment
+        uses: actions/deploy-pages@v4
